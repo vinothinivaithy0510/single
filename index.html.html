@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>WarrantyWallet – Never lose a bill or miss a warranty</title>
+<style>
+:root{--bg:#f6f7fb;--card:#fff;--tx:#1b2033;--mut:#6b7289;--pri:#4f46e5;--bd:#e3e6f0;--ok:#16a34a;--warn:#d97706;--bad:#dc2626;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1220;--card:#181c30;--tx:#eceefb;--mut:#9aa1bd;--pri:#818cf8;--bd:#2a2f4a}}
+:root[data-theme="dark"]{--bg:#0f1220;--card:#181c30;--tx:#eceefb;--mut:#9aa1bd;--pri:#818cf8;--bd:#2a2f4a}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;line-height:1.5}
+header{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;background:var(--card);border-bottom:1px solid var(--bd);position:sticky;top:env(safe-area-inset-top,0px);z-index:5}
+h1{font-size:1.15rem;margin:0}h2{margin:0 0 12px;font-size:1.3rem}
+nav{display:flex;gap:6px;flex-wrap:wrap;padding:10px 18px;max-width:900px;margin:auto}
+nav a{padding:7px 14px;border-radius:99px;text-decoration:none;color:var(--mut);font-size:.9rem;border:1px solid var(--bd);background:var(--card)}
+nav a.on{background:var(--pri);color:#fff;border-color:var(--pri)}
+main{max-width:900px;margin:auto;padding:8px 18px 40px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px}
+.stat{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px}
+.stat b{display:block;font-size:1.6rem}.stat span{color:var(--mut);font-size:.85rem}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px;margin-bottom:12px;display:flex;gap:12px;align-items:flex-start}
+.card img{width:64px;height:64px;object-fit:cover;border-radius:10px;cursor:pointer;flex:none}
+.card .in{flex:1;min-width:0}.card h3{margin:0;font-size:1rem}.card p{margin:2px 0;color:var(--mut);font-size:.85rem}
+.badge{display:inline-block;font-size:.75rem;padding:2px 10px;border-radius:99px;color:#fff;margin-top:4px}
+.ok{background:var(--ok)}.warn{background:var(--warn)}.bad{background:var(--bad)}
+button,.btn{font:inherit;cursor:pointer;border:1px solid var(--bd);background:var(--card);color:var(--tx);padding:7px 14px;border-radius:10px;font-size:.85rem}
+button.p{background:var(--pri);color:#fff;border-color:var(--pri)}button.d{color:var(--bad)}
+.acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+label{display:block;font-size:.85rem;color:var(--mut);margin:10px 0 4px}
+input,select,textarea{width:100%;font:inherit;padding:10px;border-radius:10px;border:1px solid var(--bd);background:var(--card);color:var(--tx)}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:560px){.row{grid-template-columns:1fr}}
+.empty{text-align:center;color:var(--mut);padding:30px 10px;background:var(--card);border:1px dashed var(--bd);border-radius:14px}
+.bar{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}.bar input{flex:1;min-width:140px}.bar select{width:auto}
+textarea{min-height:230px;font-family:inherit}
+#modal{position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;align-items:center;justify-content:center;z-index:20;padding:20px}
+#modal img{max-width:100%;max-height:90%;border-radius:12px}
+.tip{background:var(--card);border-left:4px solid var(--pri);padding:10px 14px;border-radius:8px;margin:12px 0;font-size:.9rem}
+</style>
+</head>
+<body>
+<header><h1>🧾 WarrantyWallet</h1><div class="acts" style="margin:0;align-items:center"><span id="who" style="color:var(--mut);font-size:.85rem"></span><button id="lo" hidden>Logout</button><button id="th" aria-label="Toggle theme">🌓</button></div></header>
+<nav id="nav">
+<a href="#/home" data-r="home">Home</a><a href="#/wallet" data-r="wallet">My Wallet</a><a href="#/add" data-r="add">+ Add Bill</a><a href="#/claim" data-r="claim">Claim Helper</a><a href="#/backup" data-r="backup">Backup</a>
+</nav>
+<main id="app"></main>
+<div id="modal"><img id="mimg" alt="Bill"></div>
+<script>
+// ---------- Helpers & storage ----------
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let items=[];
+const jget=(k,d)=>{try{return JSON.parse(localStorage.getItem(k)||d)}catch(e){return JSON.parse(d)}};
+let user=sessionStorage.getItem('ww_user')||localStorage.getItem('ww_remember')||null;
+const loadItems=()=>{items=user?jget('ww_items_'+user,'[]'):[]};loadItems();
+const save=()=>{try{localStorage.setItem('ww_items_'+user,JSON.stringify(items))}catch(e){alert('Storage is full. Export a backup and remove some bill photos.')}};
+// ---------- Auth (browser-only demo: users + salted SHA-256 hash in LocalStorage) ----------
+async function hash(s){if(window.crypto&&crypto.subtle){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}let h=5381;for(const c of s)h=((h<<5)+h+c.charCodeAt(0))|0;return 'f'+h}
+function bindAuth(){
+  const su=location.hash.includes('m=signup');
+  $('#af').onsubmit=async e=>{
+    e.preventDefault();const f=Object.fromEntries(new FormData(e.target)),em=f.email.trim().toLowerCase(),err=m=>{$('#ae').textContent=m};
+    const users=jget('ww_users','{}');
+    if(su){
+      if(f.password.length<6)return err('Password must be at least 6 characters.');
+      if(f.password!==f.confirm)return err('Passwords do not match.');
+      if(users[em])return err('This email is already registered. Please log in.');
+      const salt=crypto.getRandomValues(new Uint32Array(4)).join('');
+      users[em]={name:(f.name||'').trim()||em.split('@')[0],salt,hash:await hash(salt+f.password)};
+      localStorage.setItem('ww_users',JSON.stringify(users));
+      if(Object.keys(users).length===1&&localStorage.getItem('ww_items')){localStorage.setItem('ww_items_'+em,localStorage.getItem('ww_items'));localStorage.removeItem('ww_items')}
+    }else{
+      const u=users[em];
+      if(!u||u.hash!==await hash(u.salt+f.password))return err('Incorrect email or password.');
+    }
+    user=em;sessionStorage.setItem('ww_user',em);
+    if(f.remember)localStorage.setItem('ww_remember',em);else localStorage.removeItem('ww_remember');
+    loadItems();location.hash='#/home';route();
+  };
+}
+const today=()=>new Date().toISOString().slice(0,10);
+const addM=(d,m)=>{const x=new Date(d);x.setMonth(x.getMonth()+Number(m));return x};
+const left=i=>Math.ceil((addM(i.date,i.months)-new Date().setHours(0,0,0,0))/864e5);
+const fmt=d=>d.toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
+const inr=n=>'₹'+Number(n||0).toLocaleString('en-IN');
+const status=i=>{const l=left(i);return l<0?['Expired '+(-l)+' days ago','bad']:l<=30?['Expires in '+l+' days','warn']:['Active · '+l+' days left','ok']};
+const CATS=['Mobile & Laptop','Home Appliance','TV & Electronics','Furniture','Vehicle & Parts','Other'];
+let pendingImg='';
+
+// ---------- Item card ----------
+function card(i){
+  const [t,c]=status(i);
+  return `<div class="card">${i.img?`<img src="${i.img}" data-act="view" data-id="${i.id}" alt="Bill">`:''}
+  <div class="in"><h3>${esc(i.name)}</h3>
+  <p>${esc(i.cat)} · ${esc(i.store||'Store not added')} · ${inr(i.price)}</p>
+  <p>Bought ${fmt(new Date(i.date))} · Warranty till ${fmt(addM(i.date,i.months))}</p>
+  <span class="badge ${c}">${t}</span>
+  <div class="acts"><button data-act="claim" data-id="${i.id}">Claim</button><button data-act="edit" data-id="${i.id}">Edit</button><button class="d" data-act="del" data-id="${i.id}">Delete</button></div></div></div>`;
+}
+
+// ---------- Views ----------
+const views={
+auth(q){const s=q.get('m')==='signup';
+  return `<div class="card" style="display:block;max-width:420px;margin:30px auto"><h2>${s?'Create account':'Welcome back'}</h2><p style="color:var(--mut);margin-top:0">${s?'Sign up to keep your bills and warranties private.':'Log in to open your warranty wallet.'}</p><form id="af">${s?'<label>Your name</label><input name="name" autocomplete="name">':''}<label>Email</label><input name="email" type="email" required autocomplete="email"><label>Password</label><input name="password" type="password" required minlength="6" autocomplete="${s?'new-password':'current-password'}">${s?'<label>Confirm password</label><input name="confirm" type="password" required autocomplete="new-password">':''}<label style="display:flex;gap:8px;align-items:center;color:var(--tx)"><input type="checkbox" name="remember" style="width:auto">Keep me logged in on this device</label><div id="ae" style="color:var(--bad);font-size:.85rem;min-height:1.2em;margin-top:8px"></div><p class="acts"><button class="p" type="submit">${s?'Sign up':'Log in'}</button></p></form><p style="font-size:.9rem">${s?'Already have an account? <a href="#/auth">Log in</a>':'New here? <a href="#/auth?m=signup">Create an account</a>'}</p><div class="tip">Accounts are stored only in this browser (demo-level security, no server).</div></div>`},
+home(){
+  if(!items.length)return `<h2>Welcome 👋</h2><div class="empty"><p><b>Keep every bill and warranty in one place.</b><br>Get warned before a warranty ends, so you never pay for a repair that was free.</p><button class="p" data-act="sample">Load sample items</button> <a class="btn" href="#/add">Add my first bill</a></div>`;
+  const act=items.filter(i=>left(i)>=0), soon=act.filter(i=>left(i)<=30).sort((a,b)=>left(a)-left(b));
+  const val=act.reduce((s,i)=>s+Number(i.price||0),0);
+  const next=[...act].sort((a,b)=>left(a)-left(b)).slice(0,4);
+  return `<h2>Your Dashboard</h2><div class="grid">
+  <div class="stat"><b>${items.length}</b><span>Bills saved</span></div>
+  <div class="stat"><b>${act.length}</b><span>Under warranty</span></div>
+  <div class="stat"><b style="color:var(--warn)">${soon.length}</b><span>Expiring in 30 days</span></div>
+  <div class="stat"><b>${inr(val)}</b><span>Value protected</span></div></div>
+  ${soon.length?`<div class="tip">⚠️ <b>${soon.length}</b> item(s) expire within 30 days. Test them now and claim any fault before the warranty ends.</div>`:''}
+  <h2>Ending soonest</h2>${next.length?next.map(card).join(''):'<div class="empty">No active warranties.</div>'}`;
+},
+wallet(){
+  return `<h2>My Wallet</h2><div class="bar"><input id="q" placeholder="Search by name or store"><select id="f"><option value="">All categories</option>${CATS.map(c=>`<option>${c}</option>`).join('')}</select><select id="s"><option value="">Any status</option><option value="a">Active</option><option value="e">Expiring soon</option><option value="x">Expired</option></select></div><div id="list"></div>`;
+},
+add(q){
+  const e=items.find(i=>i.id===q.get('id'))||{};pendingImg=e.img||'';
+  return `<h2>${e.id?'Edit':'Add'} bill</h2><form id="fm" data-id="${e.id||''}">
+  <label>Product name *</label><input name="name" required value="${esc(e.name)}" placeholder="e.g. Samsung 43&quot; TV">
+  <div class="row"><div><label>Store / seller</label><input name="store" value="${esc(e.store)}"></div><div><label>Price (₹)</label><input name="price" type="number" min="0" value="${esc(e.price)}"></div></div>
+  <div class="row"><div><label>Purchase date *</label><input name="date" type="date" required max="${today()}" value="${e.date||today()}"></div><div><label>Warranty (months) *</label><input name="months" type="number" min="1" max="120" required value="${e.months||12}"></div></div>
+  <div class="row"><div><label>Category</label><select name="cat">${CATS.map(c=>`<option ${c===e.cat?'selected':''}>${c}</option>`).join('')}</select></div><div><label>Serial / IMEI</label><input name="serial" value="${esc(e.serial)}"></div></div>
+  <label>Notes</label><input name="notes" value="${esc(e.notes)}" placeholder="Service centre phone, extended warranty, etc.">
+  <label>Photo of bill (optional)</label><input type="file" id="file" accept="image/*">
+  <p class="acts"><button class="p" type="submit">Save</button><a class="btn" href="#/wallet">Cancel</a></p></form>`;
+},
+claim(q){
+  if(!items.length)return `<h2>Claim Helper</h2><div class="empty">Add a bill first.</div>`;
+  const id=q.get('id')||items[0].id;
+  return `<h2>Claim Helper</h2><p style="color:var(--mut)">Generate a ready-to-send complaint message for customer care.</p>
+  <label>Product</label><select id="cp">${items.map(i=>`<option value="${i.id}" ${i.id===id?'selected':''}>${esc(i.name)}</option>`).join('')}</select>
+  <div class="row"><div><label>What do you want?</label><select id="ct"><option>repair</option><option>replacement</option><option>refund</option></select></div><div><label>What is the problem?</label><input id="ci" placeholder="e.g. screen shows green lines"></div></div>
+  <div id="cw"></div><label>Message</label><textarea id="cm" readonly></textarea><p class="acts"><button class="p" id="cc">Copy message</button></p>`;
+},
+backup(){
+  return `<h2>Backup</h2><p style="color:var(--mut)">Your data stays in this browser only. Export a file to keep it safe or move it to another device.</p>
+  <p class="acts"><button class="p" data-act="export">Download backup</button><label class="btn" style="margin:0">Restore backup<input type="file" id="imp" accept=".json" hidden></label><button class="d" data-act="wipe">Erase all data</button></p>`;
+}};
+
+// ---------- Router ----------
+function route(){
+  let [p,qs]=(location.hash.slice(2)||'home').split('?');
+  const q=new URLSearchParams(qs||'');
+  if(!user)p='auth';else if(p==='auth')p='home';
+  const r=views[p]?p:'home';
+  $('#nav').style.display=user?'flex':'none';$('#lo').hidden=!user;
+  $('#who').textContent=user?(jget('ww_users','{}')[user]?.name||user):'';
+  $('#app').innerHTML=views[r](q);
+  document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('on',a.dataset.r===r));
+  if(r==='wallet')drawList();
+  if(r==='add')bindForm();
+  if(r==='claim')bindClaim();
+  if(r==='backup')bindImport();
+  if(r==='auth')bindAuth();
+  window.scrollTo(0,0);
+}
+function drawList(){
+  const draw=()=>{
+    const t=$('#q').value.toLowerCase(),f=$('#f').value,s=$('#s').value;
+    const l=items.filter(i=>(i.name+' '+i.store).toLowerCase().includes(t)&&(!f||i.cat===f)&&(!s||(s==='a'&&left(i)>=0)||(s==='e'&&left(i)>=0&&left(i)<=30)||(s==='x'&&left(i)<0)))
+      .sort((a,b)=>left(a)-left(b));
+    $('#list').innerHTML=l.length?l.map(card).join(''):'<div class="empty">Nothing found. <a href="#/add">Add a bill</a></div>';
+  };
+  ['q','f','s'].forEach(k=>$('#'+k).oninput=draw);draw();
+}
+function bindForm(){
+  $('#file').onchange=e=>{
+    const fl=e.target.files[0];if(!fl)return;const r=new FileReader();
+    r.onload=()=>{const im=new Image();im.onload=()=>{const k=Math.min(1,700/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=im.width*k;c.height=im.height*k;c.getContext('2d').drawImage(im,0,0,c.width,c.height);pendingImg=c.toDataURL('image/jpeg',.6)};im.src=r.result};r.readAsDataURL(fl);
+  };
+  $('#fm').onsubmit=e=>{
+    e.preventDefault();const d=Object.fromEntries(new FormData(e.target)),id=e.target.dataset.id;
+    const rec={...d,img:pendingImg,id:id||String(Date.now())};
+    if(id)items=items.map(i=>i.id===id?rec:i);else items.push(rec);
+    save();location.hash='#/wallet';
+  };
+}
+function bindClaim(){
+  const gen=()=>{
+    const i=items.find(x=>x.id===$('#cp').value),l=left(i),ex=fmt(addM(i.date,i.months));
+    $('#cw').innerHTML=l<0?`<div class="tip">Your warranty ended on ${ex}. You can still write to the company, but they may charge for service. Ask about goodwill repair.</div>`:'';
+    $('#cm').value=`Subject: Warranty claim – ${i.name}\n\nDear ${i.store||'Sir/Madam'} Customer Care,\n\nI purchased ${i.name}${i.serial?' (Serial/IMEI: '+i.serial+')':''} from ${i.store||'your store'} on ${fmt(new Date(i.date))}${i.price?' for '+inr(i.price):''}. The product is covered under warranty until ${ex}.\n\nProblem: ${$('#ci').value||'[describe the problem]'}\n\nI request a ${$('#ct').value} as per the warranty terms. I have the original bill and can share it on request. Please acknowledge this complaint, and share a complaint reference number and the expected resolution date.\n\nRegards,\n[Your name]\n[Phone number]`;
+  };
+  ['cp','ct','ci'].forEach(k=>$('#'+k).oninput=gen);gen();
+  $('#cc').onclick=()=>{$('#cm').select();navigator.clipboard?.writeText($('#cm').value).catch(()=>document.execCommand('copy'));$('#cc').textContent='Copied ✓'};
+}
+function bindImport(){
+  $('#imp').onchange=e=>{const r=new FileReader();r.onload=()=>{try{const a=JSON.parse(r.result);if(!Array.isArray(a))throw 0;items=a;save();alert('Restored '+a.length+' items');location.hash='#/home'}catch(x){alert('Invalid backup file')}};r.readAsText(e.target.files[0])};
+}
+
+// ---------- Actions (event delegation) ----------
+document.addEventListener('click',e=>{
+  const b=e.target.closest('[data-act]');if(!b)return;const id=b.dataset.id,a=b.dataset.act;
+  if(a==='edit')location.hash='#/add?id='+id;
+  if(a==='claim')location.hash='#/claim?id='+id;
+  if(a==='del'&&confirm('Delete this item?')){items=items.filter(i=>i.id!==id);save();route()}
+  if(a==='view'){$('#mimg').src=items.find(i=>i.id===id).img;$('#modal').style.display='flex'}
+  if(a==='sample'){const d=n=>{const x=new Date();x.setDate(x.getDate()-n);return x.toISOString().slice(0,10)};
+    items=[{id:'s1',name:'Samsung Galaxy M34',store:'Amazon',price:18999,date:d(340),months:12,cat:'Mobile & Laptop',serial:'',notes:'',img:''},
+    {id:'s2',name:'LG Washing Machine',store:'Reliance Digital',price:32500,date:d(200),months:24,cat:'Home Appliance',serial:'',notes:'',img:''},
+    {id:'s3',name:'Boat Headphones',store:'Flipkart',price:1999,date:d(420),months:12,cat:'TV & Electronics',serial:'',notes:'',img:''}];save();route()}
+  if(a==='export'){const l=document.createElement('a');l.href=URL.createObjectURL(new Blob([JSON.stringify(items)],{type:'application/json'}));l.download='warrantywallet-backup.json';l.click()}
+  if(a==='wipe'&&confirm('Erase everything? This cannot be undone.')){items=[];save();route()}
+});
+$('#modal').onclick=()=>$('#modal').style.display='none';
+$('#th').onclick=()=>{const r=document.documentElement,d=r.dataset.theme==='dark'||(!r.dataset.theme&&matchMedia('(prefers-color-scheme:dark)').matches);r.dataset.theme=d?'light':'dark'};
+$('#lo').onclick=()=>{user=null;items=[];sessionStorage.removeItem('ww_user');localStorage.removeItem('ww_remember');location.hash='#/auth';route()};
+window.addEventListener('hashchange',route);route();
+</script>
+</body>
+</html>
